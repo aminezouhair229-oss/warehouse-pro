@@ -335,7 +335,8 @@ def delete_product(product_id):
         c.execute("DELETE FROM products WHERE id = ?", (product_id,))
         conn.commit()
     return redirect(url_for("index"))
+    init_db()
 
 if __name__ == "__main__":
-    init_db()
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
