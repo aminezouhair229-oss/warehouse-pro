@@ -1,10 +1,10 @@
 from flask import Flask, request, render_template_string, jsonify, redirect, url_for
 import sqlite3
+import os
 
 app = Flask(__name__)
-DB_NAME = "warehouse_pro.db"
+DB_NAME = os.path.join("/tmp", "warehouse_pro.db") if os.name != "nt" else "warehouse_pro.db"
 
-# 1. Création dyal Base de Données
 def init_db():
     with sqlite3.connect(DB_NAME) as conn:
         c = conn.cursor()
@@ -20,7 +20,8 @@ def init_db():
         ''')
         conn.commit()
 
-# 2. L'Interface Web + Mobile Scanner
+init_db()
+
 HTML_PAGE = """
 <!DOCTYPE html>
 <html lang="fr">
@@ -34,14 +35,12 @@ HTML_PAGE = """
         body { background-color: #f4f6f9; }
         .card { border-radius: 12px; border: none; }
         .scan-result-box { border-left: 5px solid #0d6efd; background: #fff; }
-        .price-badge { font-size: 1.1rem; padding: 8px 12px; }
     </style>
 </head>
 <body>
 <div class="container py-4">
     <h2 class="text-center fw-bold mb-4">📦 Warehouse Pro: Stock & Prix</h2>
 
-    <!-- Dashboard Résumé -->
     <div class="row g-3 mb-4 text-center">
         <div class="col-md-4">
             <div class="card p-3 shadow-sm bg-primary text-white">
@@ -64,7 +63,6 @@ HTML_PAGE = """
     </div>
 
     <div class="row g-4">
-        <!-- Partie Scanner & Formulaire -->
         <div class="col-lg-5">
             <div class="card p-4 shadow-sm">
                 <h5 class="fw-bold mb-3">📷 1. Scanni Code-Barres</h5>
@@ -74,7 +72,6 @@ HTML_PAGE = """
                     <button type="button" class="btn btn-outline-secondary btn-sm" onclick="stopScanner()">سد الكاميرا</button>
                 </div>
 
-                <!-- Carte Informations dyal Scan -->
                 <div id="scan_info" class="p-3 my-3 rounded shadow-sm scan-result-box d-none">
                     <h5 id="info_title" class="fw-bold text-primary mb-2"></h5>
                     <div class="row text-center g-2 mt-2">
@@ -114,7 +111,7 @@ HTML_PAGE = """
                     </div>
                     <div class="mb-2">
                         <label class="form-label fw-semibold">سمية السلعة (Produit)</label>
-                        <input type="text" id="name" name="name" class="form-control" placeholder="Matalan: Chargeur Samsung Original" required>
+                        <input type="text" id="name" name="name" class="form-control" placeholder="Matalan: Chargeur Samsung" required>
                     </div>
                     <div class="row g-2 mb-2">
                         <div class="col-6">
@@ -139,12 +136,11 @@ HTML_PAGE = """
             </div>
         </div>
 
-        <!-- Partie Tableau dyal Sel3a -->
         <div class="col-lg-7">
             <div class="card p-4 shadow-sm">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h5 class="fw-bold mb-0">📊 قائمة السلعة والأثمنة</h5>
-                    <input type="text" id="searchInput" class="form-control w-50" placeholder="🔍 قلب على سلعة أولا كود..." onkeyup="filterTable()">
+                    <input type="text" id="searchInput" class="form-control w-50" placeholder="🔍 قلب على سلعة..." onkeyup="filterTable()">
                 </div>
                 <div class="table-responsive">
                     <table class="table table-hover align-middle" id="stockTable">
@@ -191,7 +187,6 @@ HTML_PAGE = """
 
 <script>
     let html5QrCode;
-
     function startScanner() {
         html5QrCode = new Html5Qrcode("reader");
         html5QrCode.start(
@@ -204,19 +199,16 @@ HTML_PAGE = """
             }
         ).catch(err => alert("Khass t-fta7 l'caméra: " + err));
     }
-
     function stopScanner() {
         if (html5QrCode) {
             html5QrCode.stop().then(() => html5QrCode.clear());
         }
     }
-
     function selectRow(barcode) {
         document.getElementById("barcode").value = barcode;
         checkProduct(barcode);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-
     function checkProduct(barcode) {
         const infoBox = document.getElementById("scan_info");
         if (!barcode.trim()) {
@@ -231,7 +223,6 @@ HTML_PAGE = """
                     document.getElementById("name").value = data.name;
                     document.getElementById("buy_price").value = data.buy_price;
                     document.getElementById("sell_price").value = data.sell_price;
-
                     const profit = (data.sell_price - data.buy_price).toFixed(2);
                     document.getElementById("info_title").innerHTML = "✅ " + data.name;
                     document.getElementById("info_stock").innerText = data.quantity + " حبات";
@@ -247,13 +238,11 @@ HTML_PAGE = """
                 }
             });
     }
-
     function filterTable() {
         let input = document.getElementById("searchInput").value.toLowerCase();
         let rows = document.querySelectorAll("#stockTable tbody tr");
         rows.forEach(row => {
-            let text = row.innerText.toLowerCase();
-            row.style.display = text.includes(input) ? "" : "none";
+            row.style.display = row.innerText.toLowerCase().includes(input) ? "" : "none";
         });
     }
 </script>
@@ -261,9 +250,9 @@ HTML_PAGE = """
 </html>
 """
 
-# 3. Routes dyal Serveur
 @app.route("/")
 def index():
+    init_db()
     with sqlite3.connect(DB_NAME) as conn:
         c = conn.cursor()
         c.execute("SELECT id, barcode, name, quantity, buy_price, sell_price FROM products ORDER BY id DESC")
@@ -283,6 +272,7 @@ def index():
 
 @app.route("/api/product/<barcode>")
 def get_product(barcode):
+    init_db()
     with sqlite3.connect(DB_NAME) as conn:
         c = conn.cursor()
         c.execute("SELECT name, quantity, buy_price, sell_price FROM products WHERE barcode = ?", (barcode,))
@@ -299,6 +289,7 @@ def get_product(barcode):
 
 @app.route("/update_stock", methods=["POST"])
 def update_stock():
+    init_db()
     barcode = request.form.get("barcode").strip()
     name = request.form.get("name").strip()
     amount = int(request.form.get("amount", 1))
@@ -330,12 +321,12 @@ def update_stock():
 
 @app.route("/delete/<int:product_id>")
 def delete_product(product_id):
+    init_db()
     with sqlite3.connect(DB_NAME) as conn:
         c = conn.cursor()
         c.execute("DELETE FROM products WHERE id = ?", (product_id,))
         conn.commit()
     return redirect(url_for("index"))
-    init_db()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
